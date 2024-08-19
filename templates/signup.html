@@ -1,0 +1,24 @@
+{% from "bootstrap5/form.html" import render_form %}
+{% extends 'base_layout.html' %}
+{% block title %}Sign up : CARS+{% endblock %}
+{% block content %}
+<main>
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 col-md-10 mx-auto">
+                <h1>Sign up</h1>
+                {% with messages = get_flashed_messages(with_categories=True) %}
+                {% if messages %}
+                    <div class="flashes">
+                        {% for category, message in messages %}
+                            <p class="{{ category }}">{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% endwith %}
+                {{ render_form(form, novalidate=True, button_map={"submit": "secondary"}) }}
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% from "bootstrap5/form.html" import render_form %}
+{% extends "base_layout.html" %}
+{% block title %}New Post : CARS+{% endblock %}
+{% block content %}
+<main class="mb-4">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 col-md-10 mx-auto">
+        <h1>New Post</h1>
+        {{ ckeditor.load() }}
+        {{ ckeditor.config(name="body") }}
+        {{ render_form(form, novalidate=True, button_map={"submit": "secondary"}) }}
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

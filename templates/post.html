@@ -1,0 +1,44 @@
+{% from "bootstrap5/form.html" import render_form %}
+{% extends "base_layout.html" %}
+{% block title %}{{ post.title }} : CARS+{% endblock %}
+{% block content %}
+<article>
+    <div class="container px-4 px-lg-5">
+        <div class="row gx-4 gx-lg-5 justify-content-center">
+            <img src="{{ post.img_url }}"/>
+            <div class="col-md-10 col-lg-8 col-xl-7">
+                <div class="my-5 post-heading">
+                    <h1>{{ post.title }}</h1>
+                    <h2 class="subheading">{{ post.subtitle }}</h2>
+                    <span class="meta"
+                      >Posted by
+                      {{ post.author.name }}
+                      on {{ post.date }}
+                    </span>
+                </div>
+                <div class="my-5">
+                    {{ post.body|safe }}
+                </div>
+
+                {{ render_form(form, novalidate=True, button_map={"submit": "secondary"}) }}
+
+                <div class="comment">
+                    <ul class="commentList">
+                        {% for c in post.comments %}
+                        <li>
+                            <div class="commenterImage">
+                                <img src="{{ c.comment_author.email|gravatar  }}" />
+                            </div>
+                            <div class="commentText">
+                                {{ c.text|safe }}
+                                <span class="date sub-text">{{ c.comment_author.name }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</article>
+{% endblock %}
