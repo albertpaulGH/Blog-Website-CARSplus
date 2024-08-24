@@ -7,22 +7,29 @@
         <div class="row gx-4 gx-lg-5 justify-content-center">
             <img src="{{ post.img_url }}"/>
             <div class="col-md-10 col-lg-8 col-xl-7">
-                <div class="my-5 post-heading">
+                <div class="my-5">
                     <h1>{{ post.title }}</h1>
                     <h2 class="subheading">{{ post.subtitle }}</h2>
-                    <span class="meta"
-                      >Posted by
-                      {{ post.author.name }}
-                      on {{ post.date }}
+                    <span class="meta">
+                        Posted by
+                        {{ post.author.username }}
+                        on {{ post.date }}
                     </span>
                 </div>
                 <div class="my-5">
                     {{ post.body|safe }}
                 </div>
+                <div class="btn-group mb-5">
+                    {% if active_user.id == 1: %}
+                    <a class="btn btn-secondary" href="{{url_for('edit_post', post_id=post.id)}}">Edit</a>
+                    <a class="btn btn-secondary" href="{{url_for('delete_post', post_id=post.id) }}">❌</a>
+                    {% endif %}
+                </div>
 
                 {{ render_form(form, novalidate=True, button_map={"submit": "secondary"}) }}
 
                 <div class="comment">
+                    <h3>Comments</h3>
                     <ul class="commentList">
                         {% for c in post.comments %}
                         <li>
@@ -31,7 +38,10 @@
                             </div>
                             <div class="commentText">
                                 {{ c.text|safe }}
-                                <span class="date sub-text">{{ c.comment_author.name }}</span>
+                                <span class="date sub-text">{{ c.comment_author.username }}</span>
+                                {% if active_user.id == 1 or active_user.id == c.comment_author_id %}
+                                <a href="{{ url_for('delete_comment', comment_id=c.id) }}">Delete❌</a>
+                                {% endif %}
                             </div>
                         </li>
                         {% endfor %}

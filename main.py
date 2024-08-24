@@ -41,16 +41,24 @@ class User(UserMixin, db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(100), unique=True)
     password: Mapped[str] = mapped_column(String(100))
-    name: Mapped[str] = mapped_column(String(1000))
+    username: Mapped[str] = mapped_column(String(1000), unique=True)
 
-    posts: Mapped[List["BlogPost"]] = relationship(back_populates="author")
-    comments: Mapped[List["Comment"]] = relationship(back_populates="comment_author")
+    posts: Mapped[List["BlogPost"]] = relationship(
+        back_populates="author",
+        cascade="all, delete, delete-orphan",
+        passive_deletes=False
+    )
+    comments: Mapped[List["Comment"]] = relationship(
+        back_populates="comment_author",
+        cascade="all, delete, delete-orphan",
+        passive_deletes=False
+    )
 
 
 class BlogPost(db.Model):
     __tablename__ = "blog_posts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     author: Mapped["User"] = relationship(back_populates="posts")
 
     title: Mapped[str] = mapped_column(String(250), unique=True, nullable=False)
@@ -59,17 +67,21 @@ class BlogPost(db.Model):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     img_url: Mapped[str] = mapped_column(String(250), nullable=False)
 
-    comments: Mapped[List["Comment"]] = relationship(back_populates="post")
+    comments: Mapped[List["Comment"]] = relationship(
+        back_populates="post",
+        cascade="all, delete, delete-orphan",
+        passive_deletes=False
+    )
 
 
 class Comment(db.Model):
     __tablename__ = "comments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    comment_author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    comment_author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     comment_author: Mapped["User"] = relationship(back_populates="comments")
 
-    post_id: Mapped[int] = mapped_column(ForeignKey("blog_posts.id"))
+    post_id: Mapped[int] = mapped_column(ForeignKey("blog_posts.id", ondelete="CASCADE"))
     post: Mapped["BlogPost"] = relationship(back_populates="comments")
 
 
@@ -93,6 +105,9 @@ def load_user(user_id):
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for("get_all_posts"))
+
     form = SignupForm()
     if form.validate_on_submit():
         result = db.session.execute(db.select(User).where(User.email == form.email.data))
@@ -100,15 +115,17 @@ def signup():
         if user:
             flash("This email already exists. Sign in instead", "error")
             return redirect(url_for("signin"))
+
         hashed_and_salted_password = generate_password_hash(
             password=form.password.data,
             method="pbkdf2:sha256",
             salt_length=8
         )
+
         new_user = User(
             email=form.email.data,
             password=hashed_and_salted_password,
-            name=form.name.data
+            username=form.username.data.lower()
         )
 
         db.session.add(new_user)
@@ -117,11 +134,19 @@ def signup():
         login_user(new_user)
 
         return redirect(url_for("get_all_posts"))
-    return render_template("signup.html", form=form, signed_in=current_user.is_authenticated)
+
+    return render_template(
+        "signup.html",
+        form=form,
+        signed_in=current_user.is_authenticated
+    )
 
 
 @app.route("/signin", methods=["GET", "POST"])
 def signin():
+    if current_user.is_authenticated:
+        return redirect(url_for("get_all_posts"))
+
     form = SigninForm()
     if form.validate_on_submit():
         email = form.email.data
@@ -135,10 +160,16 @@ def signin():
         if check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for("get_all_posts"))
+
         else:
             flash("Incorrect Password. Try again", "error")
             return redirect(url_for("signin"))
-    return render_template("signin.html", form=form, signed_in=current_user.is_authenticated)
+
+    return render_template(
+        "signin.html",
+        form=form,
+        signed_in=current_user.is_authenticated
+    )
 
 
 @app.route("/signout")
@@ -147,20 +178,35 @@ def signout():
     return redirect(url_for("get_all_posts"))
 
 
+@app.route("/user/<username>")
+@login_required
+def user_profile(username):
+    active_username = "guest"
+    if current_user.username:
+        active_username = current_user.username
+
+    if active_username == username:
+        return render_template(
+            "profile.html",
+            signed_in=current_user.is_authenticated,
+            active_user=current_user
+        )
+
+    else:
+        return abort(403)
+
+
 # Home
 @app.route("/")
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
     posts = result.scalars().all()
     posts = posts[::-1]
-    user_id = current_user.get_id()
-    if user_id:
-        user_id = int(user_id)
     return render_template(
         "index.html",
         all_posts=posts,
-        logged_in=current_user.is_authenticated,
-        user_id=user_id
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
     )
 
 
@@ -168,7 +214,6 @@ def get_all_posts():
 def show_post(post_id):
     form = CommentForm()
     requested_post = db.get_or_404(BlogPost, post_id)
-    users = db.session.execute(db.select(User).order_by(User.id)).scalars().all()
     gravatar = Gravatar(app,
                         size=100,
                         rating="g",
@@ -182,28 +227,29 @@ def show_post(post_id):
         if not current_user.is_authenticated:
             flash("Please login to comment", "error")
             return redirect(url_for("signin"))
+
         new_comment = Comment(
             text=escape(form.comment.data),
             comment_author=current_user,
             post=requested_post
         )
+
         db.session.add(new_comment)
         db.session.commit()
 
-    user_id = current_user.get_id()
-    if user_id:
-        user_id = int(user_id)
+        return redirect(url_for("show_post", post_id=post_id))
+
     return render_template(
         "post.html",
-        post=requested_post,
-        logged_in=current_user.is_authenticated,
-        user_id=user_id,
         form=form,
-        users=users
+        post=requested_post,
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
     )
 
 
 @app.route("/new-post", methods=["GET", "POST"])
+@login_required
 @admin_only
 def add_new_post():
     form = CreatePostForm()
@@ -219,10 +265,17 @@ def add_new_post():
         db.session.add(new_post)
         db.session.commit()
         return redirect(url_for("get_all_posts"))
-    return render_template("make-post.html", form=form, logged_in=current_user.is_authenticated)
+
+    return render_template(
+        "make-post.html",
+        form=form,
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
+    )
 
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@login_required
 @admin_only
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
@@ -241,14 +294,16 @@ def edit_post(post_id):
         post.body = edit_form.body.data
         db.session.commit()
         return redirect(url_for("show_post", post_id=post.id))
+
     return render_template(
         "make-post.html",
-        form=edit_form, is_edit=True,
-        logged_in=current_user.is_authenticated
+        form=edit_form,
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
     )
 
 
-@app.route("/delete/<int:post_id>")
+@app.route("/delete-post/<int:post_id>")
 @admin_only
 def delete_post(post_id):
     post_to_delete = db.get_or_404(BlogPost, post_id)
@@ -257,15 +312,40 @@ def delete_post(post_id):
     return redirect(url_for("get_all_posts"))
 
 
+@app.route("/delete-comment/<int:comment_id>")
+def delete_comment(comment_id):
+    comment_to_delete = db.get_or_404(Comment, comment_id)
+    db.session.delete(comment_to_delete)
+    db.session.commit()
+    return redirect(url_for("show_post", post_id=comment_to_delete.post_id))
+
+
+@app.route("/delete-user/<username>")
+def delete_user(username):
+    user_to_delete = db.session.execute(db.select(User).where(User.username == username)).scalar()
+    logout_user()
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    return redirect(url_for("get_all_posts"))
+
+
 @app.route("/about")
 def about():
-    return render_template("about.html", logged_in=current_user.is_authenticated)
+    return render_template(
+        "about.html",
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
+    )
 
 
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
-    return render_template("contact.html", logged_in=current_user.is_authenticated)
+    return render_template(
+        "contact.html",
+        signed_in=current_user.is_authenticated,
+        active_user=current_user
+    )
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True, port=5500)

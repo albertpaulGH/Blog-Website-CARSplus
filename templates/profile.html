@@ -1,0 +1,13 @@
+{% extends 'base_layout.html' %}
+{% block title %}{{ active_user.username }} : CARS+{% endblock %}
+{% block content %}
+<main>
+    <strong>Username: {{ active_user.username }}</strong>
+    <div>
+        <strong>Email: {{ active_user.email }}</strong>
+    </div>
+    <div class="my-2">
+        <a class="btn btn-danger" href="{{ url_for('delete_user', username=active_user.username) }}">Permanently Delete - Your Account - Your All Data</a>
+    </div>
+</main>
+{% endblock %}
